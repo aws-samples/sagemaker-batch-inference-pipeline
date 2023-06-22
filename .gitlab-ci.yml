@@ -1,0 +1,90 @@
+variables:
+  TF_ROOT: .
+  TF_STATE_NAME: "${CI_COMMIT_REF_SLUG}"
+  CACHE_FALLBACK_KEY: "test-state"
+  LAMBDA_FILE_NAME: "lambda_function_payload.zip" # Same as the Lambda function name in lambda.tf file.
+  GIT_CLEAN_FLAGS: "none"
+  REGION: "us-east-1"  # Modify the default value if your resources are in a different region.
+
+cache:
+  key: "${CI_COMMIT_REF_SLUG}"
+  paths:
+    - ${TF_ROOT}/.terraform
+
+stages:
+  - pipeline
+  - prepare
+  - validate
+  - build
+  - deploy
+  - destroy
+
+buildpipeline:
+  stage: pipeline
+  script:
+    - yum install python3 python3-pip unzip -y
+    - curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+    - unzip -o awscliv2.zip
+    - ./aws/install
+    - export AWS_DEFAULT_REGION=${REGION}
+    - aws sagemaker list-domains
+    - pip3 install boto3 sagemaker pandas pyyaml
+    - python3 ./pipeline_scripts/train_monitor_pipeline.py
+    - python3 ./pipeline_scripts/hpo_with_monitor_pipeline.py
+    - python3 ./pipeline_scripts/inference_with_monitor_pipeline.py
+
+init:
+  stage: prepare
+  script:
+    - gitlab-terraform init
+
+validate:
+  stage: validate
+  script:
+    - yum install zip -y
+    - zip -j ${LAMBDA_FILE_NAME} code/lambda_function/index.py
+    - gitlab-terraform validate
+    - ls -lart
+  artifacts:
+    paths:
+      - ${TF_ROOT}/${LAMBDA_FILE_NAME}
+    expire_in: 1 week
+
+plan:
+  stage: build
+  script:
+    - yum install -y jq # jq is required by gitlab-terraform 
+    - gitlab-terraform plan -var-file env_files/dev_env.tfvars
+    - gitlab-terraform plan-json -var-file env_files/dev_env.tfvars
+  artifacts:
+    name: plan
+    paths:
+      - ${TF_ROOT}/plan.cache
+      - ${TF_ROOT}/${LAMBDA_FILE_NAME}
+    reports:
+      terraform: ${TF_ROOT}/plan.json
+
+apply:
+  stage: deploy
+  script:
+    - gitlab-terraform apply
+  dependencies:
+    - plan
+  when: manual
+
+destroy:
+  stage: destroy
+  script:
+    - gitlab-terraform plan -var-file env_files/dev_env.tfvars
+    - gitlab-terraform destroy  -var-file env_files/dev_env.tfvars
+  when: manual
+  dependencies:
+    - plan
+
+.setup:
+  script:
+    - yum install -y git python3 python3-pip
+    - pip3 --no-cache-dir install --upgrade awscli
+    - echo "USERID    - $(aws sts get-caller-identity --query 'UserId' --output text)"
+    - echo "AccountID - $(aws sts get-caller-identity --query 'Account' --output text)"
+    - echo "Region    - $(aws configure get region)"

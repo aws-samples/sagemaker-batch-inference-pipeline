@@ -1,0 +1,12 @@
+Parameters:
+  # AccuracyMseThreshold: 10              # This value will overwrite the variable value provided from tfvars
+  framework_version: 0.23-1
+  MonitoringInstanceCount: 1
+  MonitoringInstanceType: ml.m5.xlarge
+  ProcessingInstanceCount: 1
+  ProcessingInstanceType: ml.m5.xlarge
+  RegisterNewDataQualityBaseline: True    
+  SkipDataQualityCheck: True              
+  TrainingInstanceCount: 1
+  TrainingInstanceType: ml.m5.xlarge
+  TransformInstanceType: ml.m5.xlarge
