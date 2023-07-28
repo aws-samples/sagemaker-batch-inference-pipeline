@@ -27,6 +27,7 @@ resource "aws_lambda_function" "pipeline_notification_lambda" {
   handler          = "index.lambda_handler"
   source_code_hash = filebase64sha256("lambda_function_payload.zip")
   runtime          = "python3.9"
+  reserved_concurrent_executions = 100
   environment {
     variables = {
       TOPIC_ARN = aws_sns_topic.pipeline_notification_topic.arn
